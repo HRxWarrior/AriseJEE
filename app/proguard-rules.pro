@@ -1,0 +1,1 @@
+# Arise JEE ProGuard rules

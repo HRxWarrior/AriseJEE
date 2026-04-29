@@ -1,0 +1,94 @@
+package com.arisejee.app.viewmodel
+
+import android.app.Application
+import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.viewModelScope
+import com.arisejee.app.AriseJeeApp
+import com.arisejee.app.data.db.entity.QuestionEntity
+import com.arisejee.app.data.db.entity.QuizResultEntity
+import com.arisejee.app.data.model.Difficulty
+import com.arisejee.app.data.model.Rank
+import com.arisejee.app.data.repository.QuestionRepository
+import com.arisejee.app.data.repository.UserRepository
+import com.arisejee.app.util.XpCalculator
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
+
+class QuizViewModel(app: Application) : AndroidViewModel(app) {
+    private val db = (app as AriseJeeApp).database
+    private val questionRepo = QuestionRepository(db.questionDao())
+    private val userRepo = UserRepository(db.userDao())
+    private val resultDao = db.quizResultDao()
+
+    private val _questions = MutableStateFlow<List<QuestionEntity>>(emptyList())
+    val questions: StateFlow<List<QuestionEntity>> = _questions.asStateFlow()
+    private val _currentIndex = MutableStateFlow(0)
+    val currentIndex: StateFlow<Int> = _currentIndex.asStateFlow()
+    private val _selectedAnswer = MutableStateFlow(-1)
+    val selectedAnswer: StateFlow<Int> = _selectedAnswer.asStateFlow()
+    private val _showResult = MutableStateFlow(false)
+    val showResult: StateFlow<Boolean> = _showResult.asStateFlow()
+    private val _score = MutableStateFlow(0)
+    val score: StateFlow<Int> = _score.asStateFlow()
+    private val _totalXp = MutableStateFlow(0)
+    val totalXp: StateFlow<Int> = _totalXp.asStateFlow()
+    private val _quizFinished = MutableStateFlow(false)
+    val quizFinished: StateFlow<Boolean> = _quizFinished.asStateFlow()
+    private val _timer = MutableStateFlow(0L)
+    val timer: StateFlow<Long> = _timer.asStateFlow()
+    private val _isLoading = MutableStateFlow(false)
+    val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
+
+    private var timerJob: Job? = null
+    private var streakCount = 0
+
+    fun loadQuiz(subject: String, chapter: String, examType: String) {
+        viewModelScope.launch {
+            _isLoading.value = true
+            questionRepo.ensureQuestionsLoaded(subject, chapter, examType)
+            val qs = questionRepo.getQuestions(subject, chapter, examType).first()
+            val easy = qs.filter { it.difficulty == "EASY" }.take(5)
+            val med = qs.filter { it.difficulty == "MEDIUM" }.take(5)
+            val hard = qs.filter { it.difficulty == "HARD" }.take(5)
+            _questions.value = (easy + med + hard).shuffled()
+            _currentIndex.value = 0; _score.value = 0; _totalXp.value = 0
+            _quizFinished.value = false; _selectedAnswer.value = -1; _showResult.value = false
+            streakCount = 0; _isLoading.value = false; startTimer()
+        }
+    }
+
+    fun loadMore(subject: String, chapter: String, examType: String) {
+        viewModelScope.launch { questionRepo.loadQuestions(subject, chapter, examType, 15) }
+    }
+
+    private fun startTimer() { timerJob?.cancel(); _timer.value = 0; timerJob = viewModelScope.launch { while (true) { delay(1000); _timer.value++ } } }
+    fun selectAnswer(index: Int) { if (!_showResult.value) _selectedAnswer.value = index }
+
+    fun confirmAnswer() {
+        val q = _questions.value.getOrNull(_currentIndex.value) ?: return
+        val correct = _selectedAnswer.value == q.correctAnswer
+        val timeTaken = _timer.value.toInt()
+        val diff = try { Difficulty.valueOf(q.difficulty) } catch (_: Exception) { Difficulty.MEDIUM }
+        viewModelScope.launch {
+            val user = userRepo.getUser().first()
+            val rank = if (user != null) Rank.fromString(user.rank) else Rank.E
+            if (correct) streakCount++ else streakCount = 0
+            val xp = XpCalculator.calculate(diff, rank, correct, streakCount)
+            _totalXp.value += xp.coerceAtLeast(0)
+            if (correct) _score.value++
+            userRepo.addXp(xp.coerceAtLeast(0)); userRepo.recordAnswer(correct)
+            resultDao.insert(QuizResultEntity(subject=q.subject, chapter=q.chapter, examType=q.examType, questionId=q.id, isCorrect=correct, timeTakenSeconds=timeTaken, difficulty=q.difficulty))
+        }
+        _showResult.value = true; timerJob?.cancel()
+    }
+
+    fun nextQuestion() {
+        if (_currentIndex.value + 1 >= _questions.value.size) { _quizFinished.value = true; return }
+        _currentIndex.value++; _selectedAnswer.value = -1; _showResult.value = false; startTimer()
+    }
+}
