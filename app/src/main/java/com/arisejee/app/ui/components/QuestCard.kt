@@ -39,7 +39,8 @@ fun QuestCard(title: String, description: String, current: Int, target: Int, xpR
         Text(description, color=TextSecondary, fontSize=12.sp)
         Spacer(Modifier.height(8.dp))
         Row(verticalAlignment = Alignment.CenterVertically) {
-            LinearProgressIndicator(progress={ progress.coerceIn(0f,1f) }, modifier=Modifier.weight(1f).height(6.dp).clip(RoundedCornerShape(3.dp)), color=glow, trackColor=DarkCard)
+            @Suppress("DEPRECATION")
+            LinearProgressIndicator(progress = progress.coerceIn(0f,1f), modifier=Modifier.weight(1f).height(6.dp).clip(RoundedCornerShape(3.dp)), color=glow, trackColor=DarkCard)
             Spacer(Modifier.width(8.dp))
             Text("$current/$target", color=TextSecondary, fontSize=11.sp)
         }
