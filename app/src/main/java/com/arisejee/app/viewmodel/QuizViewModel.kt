@@ -43,6 +43,8 @@ class QuizViewModel(app: Application) : AndroidViewModel(app) {
     val timer: StateFlow<Long> = _timer.asStateFlow()
     private val _isLoading = MutableStateFlow(false)
     val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
+    private val _loadMoreMessage = MutableStateFlow("")
+    val loadMoreMessage: StateFlow<String> = _loadMoreMessage.asStateFlow()
 
     private var timerJob: Job? = null
     private var streakCount = 0
@@ -63,10 +65,25 @@ class QuizViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun loadMore(subject: String, chapter: String, examType: String) {
-        viewModelScope.launch { questionRepo.loadQuestions(subject, chapter, examType, 15) }
+        viewModelScope.launch {
+            val before = questionRepo.getCount(subject, chapter, examType)
+            questionRepo.loadQuestions(subject, chapter, examType, 15)
+            val after = questionRepo.getCount(subject, chapter, examType)
+            _loadMoreMessage.value = if (after > before) {
+                "${after - before} new questions added!"
+            } else {
+                "All offline questions loaded. Connect API for more."
+            }
+        }
     }
 
-    private fun startTimer() { timerJob?.cancel(); _timer.value = 0; timerJob = viewModelScope.launch { while (true) { delay(1000); _timer.value++ } } }
+    fun clearLoadMoreMessage() { _loadMoreMessage.value = "" }
+
+    private fun startTimer() {
+        timerJob?.cancel(); _timer.value = 0
+        timerJob = viewModelScope.launch { while (true) { delay(1000); _timer.value++ } }
+    }
+
     fun selectAnswer(index: Int) { if (!_showResult.value) _selectedAnswer.value = index }
 
     fun confirmAnswer() {
