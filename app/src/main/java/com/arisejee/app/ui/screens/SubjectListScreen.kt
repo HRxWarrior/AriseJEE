@@ -3,10 +3,13 @@ package com.arisejee.app.ui.screens
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Calculate
 import androidx.compose.material.icons.filled.Science
@@ -14,6 +17,7 @@ import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -40,11 +44,20 @@ fun SubjectListScreen(navController: NavController) {
         val colors = listOf(NeonBlue, NeonPurple, NeonGreen)
         val icons = listOf(Icons.Default.Speed, Icons.Default.Science, Icons.Default.Calculate)
         subjects.forEachIndexed { i, sub ->
-            GlowCard(glowColor = colors[i], modifier = Modifier.clickable { navController.navigate(Screen.Chapters.createRoute(sub.name)) }) {
-                Icon(icons[i], sub.name, tint = colors[i])
-                Spacer(Modifier.height(8.dp))
-                Text(sub.name, color = TextPrimary, fontWeight = FontWeight.Bold, fontSize = 18.sp)
-                Text("${sub.chapters.size} chapters", color = TextSecondary, fontSize = 13.sp)
+            GlowCard(
+                glowColor = colors[i],
+                modifier = Modifier.clickable {
+                    navController.navigate(Screen.Chapters.createRoute(sub.name))
+                }
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(icons[i], sub.name, tint = colors[i], modifier = Modifier.size(32.dp))
+                    Spacer(Modifier.width(16.dp))
+                    Column {
+                        Text(sub.name, color = TextPrimary, fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                        Text("${sub.chapters.size} chapters", color = TextSecondary, fontSize = 13.sp)
+                    }
+                }
             }
             Spacer(Modifier.height(12.dp))
         }
