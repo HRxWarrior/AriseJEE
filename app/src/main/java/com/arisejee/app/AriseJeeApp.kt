@@ -22,10 +22,14 @@ class AriseJeeApp : Application() {
         super.onCreate()
         CoroutineScope(Dispatchers.IO).launch {
             try {
-                val count = database.questionDao().getCount("Physics", "Kinematics", "JEE_MAINS")
-                if (count == 0) loadQuestionsFromAssets()
+                // Check if we have JEE_ADVANCED questions; if not, reload all
+                val advCount = database.questionDao().getCount("Physics", "Kinematics", "JEE_ADVANCED")
+                if (advCount == 0) {
+                    Log.i("AriseJeeApp", "No Advanced questions found, loading from assets...")
+                    loadQuestionsFromAssets()
+                }
             } catch (e: Exception) {
-                Log.e("AriseJeeApp", "Error loading questions", e)
+                Log.e("AriseJeeApp", "Error checking questions", e)
             }
         }
     }

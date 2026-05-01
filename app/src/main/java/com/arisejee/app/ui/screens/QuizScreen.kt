@@ -41,7 +41,6 @@ import com.arisejee.app.ui.theme.DarkCard
 import com.arisejee.app.ui.theme.NeonBlue
 import com.arisejee.app.ui.theme.NeonCyan
 import com.arisejee.app.ui.theme.NeonGreen
-import com.arisejee.app.ui.theme.NeonGold
 import com.arisejee.app.ui.theme.NeonRed
 import com.arisejee.app.ui.theme.TextPrimary
 import com.arisejee.app.ui.theme.TextSecondary
@@ -60,6 +59,7 @@ fun QuizScreen(navController: NavController, subject: String, chapter: String, e
     val timer by vm.timer.collectAsState()
     val loading by vm.isLoading.collectAsState()
     val loadMoreMsg by vm.loadMoreMessage.collectAsState()
+    val totalAvailable by vm.totalAvailable.collectAsState()
 
     LaunchedEffect(subject, chapter, examType) { vm.loadQuiz(subject, chapter, examType) }
     LaunchedEffect(finished) {
@@ -74,7 +74,7 @@ fun QuizScreen(navController: NavController, subject: String, chapter: String, e
                 IconButton(onClick = { navController.popBackStack() }) { Icon(Icons.Default.ArrowBack, "Back", tint = NeonBlue) }
                 Column(Modifier.weight(1f)) {
                     Text(chapter, color = TextPrimary, fontWeight = FontWeight.Bold, fontSize = 16.sp)
-                    Text("${idx + 1}/${questions.size}", color = TextSecondary, fontSize = 12.sp)
+                    Text("${idx + 1}/${questions.size} (${totalAvailable} total)", color = TextSecondary, fontSize = 12.sp)
                 }
                 Text(TimeFormatter.secondsToTimer(timer), color = NeonCyan, fontWeight = FontWeight.Bold, fontSize = 16.sp)
             }
@@ -96,58 +96,33 @@ fun QuizScreen(navController: NavController, subject: String, chapter: String, e
                         val isSelected = selected == i
                         val isCorrect = showResult && i == q.correctAnswer
                         val isWrong = showResult && isSelected && i != q.correctAnswer
-                        val borderColor = when {
-                            isCorrect -> NeonGreen; isWrong -> NeonRed
-                            isSelected -> NeonBlue; else -> TextSecondary.copy(alpha = 0.3f)
-                        }
-                        val bgColor = when {
-                            isCorrect -> NeonGreen.copy(alpha = 0.1f); isWrong -> NeonRed.copy(alpha = 0.1f)
-                            isSelected -> NeonBlue.copy(alpha = 0.1f); else -> DarkCard
-                        }
-                        Box(
-                            Modifier.fillMaxWidth().padding(vertical = 4.dp)
-                                .border(1.dp, borderColor, RoundedCornerShape(12.dp))
-                                .background(bgColor, RoundedCornerShape(12.dp))
-                                .clickable(enabled = !showResult) { vm.selectAnswer(i) }
-                                .padding(14.dp)
-                        ) {
-                            Row {
-                                Text("${('A' + i)}. ", color = borderColor, fontWeight = FontWeight.Bold, fontSize = 14.sp)
-                                Text(opt, color = TextPrimary, fontSize = 14.sp)
-                            }
+                        val borderColor = when { isCorrect -> NeonGreen; isWrong -> NeonRed; isSelected -> NeonBlue; else -> TextSecondary.copy(alpha = 0.3f) }
+                        val bgColor = when { isCorrect -> NeonGreen.copy(alpha = 0.1f); isWrong -> NeonRed.copy(alpha = 0.1f); isSelected -> NeonBlue.copy(alpha = 0.1f); else -> DarkCard }
+                        Box(Modifier.fillMaxWidth().padding(vertical = 4.dp).border(1.dp, borderColor, RoundedCornerShape(12.dp)).background(bgColor, RoundedCornerShape(12.dp)).clickable(enabled = !showResult) { vm.selectAnswer(i) }.padding(14.dp)) {
+                            Row { Text("${('A' + i)}. ", color = borderColor, fontWeight = FontWeight.Bold, fontSize = 14.sp); Text(opt, color = TextPrimary, fontSize = 14.sp) }
                         }
                     }
                     if (showResult && selected != q.correctAnswer) {
                         Spacer(Modifier.height(12.dp))
-                        SystemPanel("SOLUTION", glowColor = NeonGreen) {
-                            Text(q.solution, color = TextPrimary, fontSize = 13.sp, lineHeight = 20.sp)
-                        }
+                        SystemPanel("SOLUTION", glowColor = NeonGreen) { Text(q.solution, color = TextPrimary, fontSize = 13.sp, lineHeight = 20.sp) }
                     }
                 }
                 Spacer(Modifier.height(12.dp))
                 Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
-                    if (!showResult) {
-                        GlowButton("Confirm", onClick = { if (selected >= 0) vm.confirmAnswer() }, enabled = selected >= 0)
-                    } else {
-                        GlowButton("Next", onClick = { vm.nextQuestion() })
-                    }
+                    if (!showResult) GlowButton("Confirm", onClick = { if (selected >= 0) vm.confirmAnswer() }, enabled = selected >= 0)
+                    else GlowButton("Next", onClick = { vm.nextQuestion() })
                     Spacer(Modifier.height(8.dp))
-                    GlowButton("Load More Questions", onClick = { vm.loadMore(subject, chapter, examType) })
+                    GlowButton("Load More / Reshuffle", onClick = { vm.loadMore(subject, chapter, examType) })
                 }
             }
         }
 
-        // Snackbar for Load More feedback
         if (loadMoreMsg.isNotEmpty()) {
             LaunchedEffect(loadMoreMsg) {
-                kotlinx.coroutines.delay(3000)
+                kotlinx.coroutines.delay(3500)
                 vm.clearLoadMoreMessage()
             }
-            Snackbar(
-                modifier = Modifier.align(Alignment.BottomCenter).padding(16.dp),
-                containerColor = DarkCard,
-                contentColor = NeonCyan
-            ) {
+            Snackbar(modifier = Modifier.align(Alignment.BottomCenter).padding(16.dp), containerColor = DarkCard, contentColor = NeonCyan) {
                 Text(loadMoreMsg, color = NeonCyan, fontSize = 13.sp)
             }
         }

@@ -45,23 +45,38 @@ class QuizViewModel(app: Application) : AndroidViewModel(app) {
     val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
     private val _loadMoreMessage = MutableStateFlow("")
     val loadMoreMessage: StateFlow<String> = _loadMoreMessage.asStateFlow()
+    private val _totalAvailable = MutableStateFlow(0)
+    val totalAvailable: StateFlow<Int> = _totalAvailable.asStateFlow()
 
     private var timerJob: Job? = null
     private var streakCount = 0
+    private var currentSubject = ""
+    private var currentChapter = ""
+    private var currentExamType = ""
+    private var usedQuestionIds = mutableSetOf<Long>()
 
     fun loadQuiz(subject: String, chapter: String, examType: String) {
+        currentSubject = subject; currentChapter = chapter; currentExamType = examType
         viewModelScope.launch {
             _isLoading.value = true
             questionRepo.ensureQuestionsLoaded(subject, chapter, examType)
-            val qs = questionRepo.getQuestions(subject, chapter, examType).first()
-            val easy = qs.filter { it.difficulty == "EASY" }.take(5)
-            val med = qs.filter { it.difficulty == "MEDIUM" }.take(5)
-            val hard = qs.filter { it.difficulty == "HARD" }.take(5)
-            _questions.value = (easy + med + hard).shuffled()
+            refreshQuestions()
             _currentIndex.value = 0; _score.value = 0; _totalXp.value = 0
             _quizFinished.value = false; _selectedAnswer.value = -1; _showResult.value = false
-            streakCount = 0; _isLoading.value = false; startTimer()
+            streakCount = 0; usedQuestionIds.clear(); _isLoading.value = false; startTimer()
         }
+    }
+
+    private suspend fun refreshQuestions() {
+        val allQs = questionRepo.getQuestions(currentSubject, currentChapter, currentExamType).first()
+        _totalAvailable.value = allQs.size
+        // Filter out already-used questions, then pick 15 (5E+5M+5H)
+        val unused = allQs.filter { it.id !in usedQuestionIds }
+        val pool = if (unused.size >= 5) unused else allQs // fallback to all if not enough unused
+        val easy = pool.filter { it.difficulty == "EASY" }.shuffled().take(5)
+        val med = pool.filter { it.difficulty == "MEDIUM" }.shuffled().take(5)
+        val hard = pool.filter { it.difficulty == "HARD" }.shuffled().take(5)
+        _questions.value = (easy + med + hard).shuffled()
     }
 
     fun loadMore(subject: String, chapter: String, examType: String) {
@@ -69,10 +84,20 @@ class QuizViewModel(app: Application) : AndroidViewModel(app) {
             val before = questionRepo.getCount(subject, chapter, examType)
             questionRepo.loadQuestions(subject, chapter, examType, 15)
             val after = questionRepo.getCount(subject, chapter, examType)
-            _loadMoreMessage.value = if (after > before) {
-                "${after - before} new questions added!"
+            if (after > before) {
+                _loadMoreMessage.value = "${after - before} new questions added! Quiz will use them next round."
             } else {
-                "All offline questions loaded. Connect API for more."
+                // Mark current questions as used and reload with different shuffle
+                usedQuestionIds.addAll(_questions.value.map { it.id })
+                refreshQuestions()
+                if (_questions.value.isNotEmpty()) {
+                    _loadMoreMessage.value = "Reshuffled! ${_totalAvailable.value} questions available."
+                    _currentIndex.value = 0; _score.value = 0; _totalXp.value = 0
+                    _quizFinished.value = false; _selectedAnswer.value = -1; _showResult.value = false
+                    streakCount = 0; startTimer()
+                } else {
+                    _loadMoreMessage.value = "All offline questions completed! Connect API for more."
+                }
             }
         }
     }
@@ -101,6 +126,7 @@ class QuizViewModel(app: Application) : AndroidViewModel(app) {
             userRepo.addXp(xp.coerceAtLeast(0)); userRepo.recordAnswer(correct)
             resultDao.insert(QuizResultEntity(subject=q.subject, chapter=q.chapter, examType=q.examType, questionId=q.id, isCorrect=correct, timeTakenSeconds=timeTaken, difficulty=q.difficulty))
         }
+        usedQuestionIds.add(q.id)
         _showResult.value = true; timerJob?.cancel()
     }
 
